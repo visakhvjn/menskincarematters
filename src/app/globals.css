@@ -66,3 +66,26 @@ body {
   padding-left: 0.75rem;
   opacity: 0.9;
 }
+
+.markdown-content .chat-images-row {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: 0.75rem;
+  overflow-x: auto;
+  margin-top: 0.75rem;
+  padding-bottom: 0.25rem;
+}
+
+.markdown-content .chat-image-wrap {
+  flex: 0 0 auto;
+}
+
+.markdown-content img.chat-image {
+  display: block;
+  width: 132px;
+  height: 132px;
+  border-radius: 0.625rem;
+  object-fit: cover;
+  background: #27272a;
+}

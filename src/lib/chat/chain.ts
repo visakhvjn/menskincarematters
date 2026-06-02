@@ -2,6 +2,7 @@ import { createAgent } from "langchain";
 import { MemorySaver } from "@langchain/langgraph-checkpoint";
 import { ChatOpenAI } from "@langchain/openai";
 import { SKINCARE_SYSTEM_PROMPT } from "@/lib/chat/prompts";
+import { duckDuckGoSearchTool } from "@/lib/chat/tools/duckDuckGoSearch";
 
 const checkpointer = new MemorySaver();
 const llm = new ChatOpenAI({
@@ -11,7 +12,7 @@ const llm = new ChatOpenAI({
 
 const skincareAgent = createAgent({
   model: llm,
-  tools: [],
+  tools: [duckDuckGoSearchTool],
   systemPrompt: SKINCARE_SYSTEM_PROMPT,
   checkpointer,
 });
@@ -48,6 +49,18 @@ function normalizeContent(content: unknown): string {
   return JSON.stringify(content);
 }
 
+function getCurrentDateLabel() {
+  return new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function buildUserMessage(question: string) {
+  return `[Current date: ${getCurrentDateLabel()}]\n\n${question}`;
+}
+
 function extractChunkText(chunk: unknown): string {
   if (!chunk) return "";
   if (typeof chunk === "string") return chunk;
@@ -64,7 +77,7 @@ export async function streamSkincareAnswer(input: {
   const encoder = new TextEncoder();
   const eventStream = await skincareAgent.streamEvents(
     {
-      messages: [{ role: "user", content: input.question }],
+      messages: [{ role: "user", content: buildUserMessage(input.question) }],
     },
     {
       configurable: {
@@ -100,7 +113,7 @@ export async function generateSkincareAnswer(input: {
   threadId: string;
 }): Promise<string> {
   const result = await skincareAgent.invoke({
-    messages: [{ role: "user", content: input.question }],
+    messages: [{ role: "user", content: buildUserMessage(input.question) }],
   }, {
     configurable: {
       thread_id: input.threadId,

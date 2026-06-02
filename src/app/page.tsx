@@ -12,6 +12,69 @@ type ChatMessage = {
 const initialAssistantMessage =
   "Ask me anything about men's grooming, especially skincare.";
 
+type MarkdownImage = {
+  alt: string;
+  src: string;
+};
+
+const markdownImageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+
+function extractMarkdownImages(content: string) {
+  const images: MarkdownImage[] = [];
+  const text = content
+    .replace(markdownImageRegex, (_, alt, src) => {
+      images.push({ alt: alt || "Search result image", src });
+      return "";
+    })
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  return { text, images };
+}
+
+function AssistantMessage({ content }: { content: string }) {
+  const { text, images } = extractMarkdownImages(content);
+
+  return (
+    <div className="markdown-content text-[15px] text-zinc-100">
+      {text ? (
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            a: ({ href, children }) => (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sky-400 underline"
+              >
+                {children}
+              </a>
+            ),
+          }}
+        >
+          {text}
+        </ReactMarkdown>
+      ) : null}
+      {images.length > 0 ? (
+        <div className="chat-images-row">
+          {images.map((image, imageIndex) => (
+            <span key={`${image.src}-${imageIndex}`} className="chat-image-wrap">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={image.src}
+                alt={image.alt}
+                loading="lazy"
+                className="chat-image"
+              />
+            </span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function Home() {
   const [input, setInput] = useState("");
   const [threadId, setThreadId] = useState<string | undefined>(undefined);
@@ -130,11 +193,7 @@ export default function Home() {
             >
               <div className="mx-auto max-w-3xl">
                 {messageItem.role === "assistant" ? (
-                  <div className="markdown-content text-[15px] text-zinc-100">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {messageItem.content}
-                    </ReactMarkdown>
-                  </div>
+                  <AssistantMessage content={messageItem.content} />
                 ) : (
                   <div className="text-[15px] text-zinc-100">{messageItem.content}</div>
                 )}
