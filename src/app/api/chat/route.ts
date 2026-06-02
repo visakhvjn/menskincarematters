@@ -4,6 +4,9 @@ import { streamSkincareAnswer } from "@/lib/chat/chain";
 import { classifyMensGroomingQuestion } from "@/lib/chat/domainGuard";
 import { OUT_OF_DOMAIN_RESPONSE } from "@/lib/chat/prompts";
 
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 const requestSchema = z.object({
   message: z.string().min(1, "Message is required."),
   threadId: z.string().min(1).nullable().optional(),

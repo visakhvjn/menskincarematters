@@ -29,11 +29,14 @@ npm install
 cp .env.local.example .env.local
 ```
 
-Add your key to `.env.local`:
+Add your keys to `.env.local`:
 
 ```bash
 OPENAI_API_KEY=your_openai_api_key_here
+SERPER_API_KEY=your_serper_api_key_here
 ```
+
+`SERPER_API_KEY` is strongly recommended for production. DuckDuckGo HTML scraping often works locally but gets blocked on cloud hosts (Vercel/AWS), which breaks live web search in production.
 
 3. Start the app:
 

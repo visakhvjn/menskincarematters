@@ -41,7 +41,8 @@ type ImageSearchResult = {
 };
 
 const MIN_SEARCH_INTERVAL_MS = 2500;
-const USER_AGENT = "Mozilla/5.0 (compatible; MenGroomingAssistant/1.0)";
+const USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36";
 
 let lastSearchAt = 0;
 
@@ -301,6 +302,163 @@ async function fetchPurchaseResults(query: string, maxResults: number) {
   return fetchWebResults(`${query} buy online`, maxResults);
 }
 
+type SerperOrganic = {
+  title?: string;
+  link?: string;
+  snippet?: string;
+};
+
+type SerperShopping = {
+  title?: string;
+  link?: string;
+  price?: string;
+  source?: string;
+};
+
+type SerperImage = {
+  title?: string;
+  imageUrl?: string;
+  link?: string;
+};
+
+async function serperRequest<T>(endpoint: string, body: Record<string, unknown>) {
+  const apiKey = process.env.SERPER_API_KEY;
+  if (!apiKey) return null;
+
+  const response = await fetch(`https://google.serper.dev/${endpoint}`, {
+    method: "POST",
+    headers: {
+      "X-API-KEY": apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  return (await response.json()) as T;
+}
+
+async function serperSearch(query: string, maxResults: number, maxImages: number) {
+  const [searchData, shoppingData, imageData] = await Promise.all([
+    serperRequest<{ organic?: SerperOrganic[] }>("search", {
+      q: query,
+      num: maxResults,
+    }),
+    serperRequest<{ shopping?: SerperShopping[] }>("shopping", {
+      q: query,
+      num: 3,
+    }),
+    maxImages > 0
+      ? serperRequest<{ images?: SerperImage[] }>("images", {
+          q: query,
+          num: maxImages,
+        })
+      : Promise.resolve(null),
+  ]);
+
+  const webResults: WebSearchResult[] = (searchData?.organic ?? [])
+    .filter((item) => item.title && item.link)
+    .slice(0, maxResults)
+    .map((item) => ({
+      title: item.title!,
+      url: item.link!,
+      snippet: item.snippet ?? "",
+    }));
+
+  const purchaseLinks: PurchaseLink[] = (shoppingData?.shopping ?? [])
+    .filter((item) => item.title && item.link)
+    .slice(0, 3)
+    .map((item) => ({
+      title: item.price ? `${item.title} (${item.price})` : item.title!,
+      url: item.link!,
+    }));
+
+  const imageResults: ImageSearchResult[] = (imageData?.images ?? [])
+    .filter((item) => item.imageUrl)
+    .slice(0, maxImages)
+    .map((item) => ({
+      title: item.title?.trim() || query,
+      imageUrl: item.imageUrl!,
+      ...(item.link ? { sourceUrl: item.link } : {}),
+    }));
+
+  return formatSearchResponse({
+    query,
+    freshQuery: query,
+    provider: "serper",
+    webResults,
+    instantSnippets: [],
+    instantImageUrls: [],
+    purchaseLinks,
+    imageResults,
+  });
+}
+
+function formatSearchResponse(input: {
+  query: string;
+  freshQuery: string;
+  provider: string;
+  webResults: WebSearchResult[];
+  instantSnippets: string[];
+  instantImageUrls: string[];
+  purchaseLinks: PurchaseLink[];
+  imageResults: ImageSearchResult[];
+}) {
+  const snippets: string[] = [
+    `Search provider: ${input.provider}`,
+    `Search query used: ${input.freshQuery}`,
+  ];
+
+  if (input.webResults.length > 0) {
+    snippets.push(
+      "Latest web results:",
+      ...input.webResults.map(
+        (result, index) =>
+          `${index + 1}. ${result.title}\nURL: ${result.url}${result.snippet ? `\nSnippet: ${result.snippet}` : ""}`
+      )
+    );
+  }
+
+  snippets.push(...input.instantSnippets);
+
+  if (input.purchaseLinks.length > 0) {
+    snippets.push(
+      "Where to buy (include these purchase links in your answer when recommending products):",
+      ...input.purchaseLinks.map(
+        (link, index) => `${index + 1}. ${link.title}\nPurchase URL: ${link.url}`
+      )
+    );
+  }
+
+  const imageLines: string[] = [];
+
+  for (const image of input.imageResults) {
+    imageLines.push(
+      `![${image.title}](${image.imageUrl})${image.sourceUrl ? `\nSource: ${image.sourceUrl}` : ""}`
+    );
+  }
+
+  for (const imageUrl of input.instantImageUrls) {
+    if (!input.imageResults.some((result) => result.imageUrl === imageUrl)) {
+      imageLines.push(`![${input.query}](${imageUrl})`);
+    }
+  }
+
+  if (imageLines.length > 0) {
+    snippets.push(`Relevant images:\n${imageLines.join("\n\n")}`);
+  }
+
+  if (snippets.length <= 2 && imageLines.length === 0) {
+    return "No web search results found for this query. Say that live search did not return results and avoid outdated training-data specifics.";
+  }
+
+  return snippets.join("\n\n");
+}
+
 async function fetchWebResults(query: string, maxResults: number): Promise<WebSearchResult[]> {
   const html = await fetchText(
     `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`
@@ -335,67 +493,33 @@ async function duckDuckGoSearch(query: string, maxResults: number, maxImages: nu
   await throttleSearchRequests();
 
   const freshQuery = withFreshnessQuery(query);
-  const webResults = await fetchWebResults(freshQuery, maxResults);
-  await sleep(500);
 
-  const purchaseResults = await fetchPurchaseResults(freshQuery, 3);
-  await sleep(500);
+  if (process.env.SERPER_API_KEY) {
+    return serperSearch(freshQuery, maxResults, maxImages);
+  }
 
-  const instantAnswer = await fetchInstantAnswer(freshQuery, maxResults);
-  await sleep(500);
+  const [webResults, purchaseResults, instantAnswer, imageResults] = await Promise.all([
+    fetchWebResults(freshQuery, maxResults),
+    fetchPurchaseResults(freshQuery, 3),
+    fetchInstantAnswer(freshQuery, maxResults),
+    maxImages > 0 ? fetchImageResults(freshQuery, maxImages) : Promise.resolve([]),
+  ]);
 
-  const imageResults = await fetchImageResults(freshQuery, maxImages);
   const purchaseLinks = collectPurchaseLinks(
     [...webResults, ...purchaseResults],
     imageResults
   );
 
-  const snippets: string[] = [`Search query used: ${freshQuery}`];
-
-  if (webResults.length > 0) {
-    snippets.push(
-      "Latest web results:",
-      ...webResults.map(
-        (result, index) =>
-          `${index + 1}. ${result.title}\nURL: ${result.url}${result.snippet ? `\nSnippet: ${result.snippet}` : ""}`
-      )
-    );
-  }
-
-  snippets.push(...instantAnswer.snippets);
-
-  if (purchaseLinks.length > 0) {
-    snippets.push(
-      "Where to buy (include these purchase links in your answer when recommending products):",
-      ...purchaseLinks.map(
-        (link, index) => `${index + 1}. ${link.title}\nPurchase URL: ${link.url}`
-      )
-    );
-  }
-
-  const imageLines: string[] = [];
-
-  for (const image of imageResults) {
-    imageLines.push(
-      `![${image.title}](${image.imageUrl})${image.sourceUrl ? `\nSource: ${image.sourceUrl}` : ""}`
-    );
-  }
-
-  for (const imageUrl of instantAnswer.imageUrls) {
-    if (!imageResults.some((result) => result.imageUrl === imageUrl)) {
-      imageLines.push(`![${query}](${imageUrl})`);
-    }
-  }
-
-  if (imageLines.length > 0) {
-    snippets.push(`Relevant images:\n${imageLines.join("\n\n")}`);
-  }
-
-  if (snippets.length <= 1 && imageLines.length === 0) {
-    return "No DuckDuckGo results found for this query. Say that live search did not return results and avoid outdated training-data specifics.";
-  }
-
-  return snippets.join("\n\n");
+  return formatSearchResponse({
+    query,
+    freshQuery,
+    provider: "duckduckgo",
+    webResults,
+    instantSnippets: instantAnswer.snippets,
+    instantImageUrls: instantAnswer.imageUrls,
+    purchaseLinks,
+    imageResults,
+  });
 }
 
 export const duckDuckGoSearchTool = tool(
@@ -409,7 +533,7 @@ export const duckDuckGoSearchTool = tool(
   {
     name: "duckduckgo_search",
     description:
-      "Search DuckDuckGo for the latest men's grooming and skincare information, purchase/store URLs, and relevant product images.",
+      "Search the web for the latest men's grooming and skincare information, purchase/store URLs, and relevant product images. Uses Serper in production when configured, otherwise DuckDuckGo.",
     schema: z.object({
       query: z.string().describe("The search query."),
       maxResults: z
