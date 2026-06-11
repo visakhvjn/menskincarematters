@@ -32,7 +32,7 @@ ${productList}
 
 Context from product search: ${input.summary}
 
-Fetch each product using indian_product_search, then write the final answer with Indian purchase links and images.`
+Fetch each product using indian_product_search, then write the final answer with product images and buy links. Use the product name as each link's text (e.g. [Product name](url)). Do not add a "Where to buy in India" section or use store names as link text.`
   );
 }
 
