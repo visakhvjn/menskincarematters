@@ -489,7 +489,7 @@ async function fetchWebResults(query: string, maxResults: number): Promise<WebSe
   return results;
 }
 
-async function duckDuckGoSearch(query: string, maxResults: number, maxImages: number) {
+export async function duckDuckGoSearch(query: string, maxResults: number, maxImages: number) {
   await throttleSearchRequests();
 
   const freshQuery = withFreshnessQuery(query);

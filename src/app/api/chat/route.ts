@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { streamSkincareAnswer } from "@/lib/chat/chain";
-import { classifyMensGroomingQuestion } from "@/lib/chat/domainGuard";
-import { OUT_OF_DOMAIN_RESPONSE } from "@/lib/chat/prompts";
+import { runChatPipeline } from "@/lib/chat/pipeline";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -41,30 +39,33 @@ export async function POST(request: Request) {
 
     const { message, threadId } = parsed.data;
     const resolvedThreadId = threadId ?? crypto.randomUUID();
-    const guard = await classifyMensGroomingQuestion(message);
-
-    if (!guard.isInDomain) {
-      return new Response(OUT_OF_DOMAIN_RESPONSE, {
-        headers: {
-          "Content-Type": "text/plain; charset=utf-8",
-          "X-Thread-Id": resolvedThreadId,
-          "X-In-Domain": "false",
-        },
-      });
-    }
-
-    const stream = await streamSkincareAnswer({
+    const result = await runChatPipeline({
       question: message,
       threadId: resolvedThreadId,
     });
 
-    return new Response(stream, {
+    if (result.type === "refusal") {
+      return new Response(result.message, {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "X-Thread-Id": resolvedThreadId,
+          "X-In-Domain": "false",
+          "X-Classification-Score": String(result.score),
+          "X-Classification-Category": result.category,
+        },
+      });
+    }
+
+    return new Response(result.stream, {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
         "X-Thread-Id": resolvedThreadId,
         "X-In-Domain": "true",
+        "X-Classification-Score": String(result.score),
+        "X-Classification-Category": result.category,
+        "X-Has-Products": String(result.hasProducts),
       },
     });
   } catch (error) {
