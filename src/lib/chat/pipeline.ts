@@ -5,6 +5,7 @@ import {
 } from "@/lib/chat/agents/searchAgent";
 import { streamIndianProductAnswer } from "@/lib/chat/agents/productFetcherAgent";
 import { OUT_OF_DOMAIN_RESPONSE } from "@/lib/chat/prompts";
+import type { ChatHistoryMessage } from "@/lib/chat/utils/messages";
 
 export type PipelineResult =
   | {
@@ -24,8 +25,13 @@ export type PipelineResult =
 export async function runChatPipeline(input: {
   question: string;
   threadId: string;
+  history: ChatHistoryMessage[];
 }): Promise<PipelineResult> {
-  const classification = await classifyQuery(input.question);
+  const classification = await classifyQuery({
+    question: input.question,
+    threadId: input.threadId,
+    history: input.history,
+  });
 
   if (!classification.isAccepted) {
     return {
@@ -39,12 +45,14 @@ export async function runChatPipeline(input: {
   const searchResult = await findProductSuggestions({
     question: input.question,
     threadId: input.threadId,
+    history: input.history,
   });
 
   if (searchResult.hasProducts) {
     const stream = await streamIndianProductAnswer({
       question: input.question,
       threadId: input.threadId,
+      history: input.history,
       products: searchResult.products,
       summary: searchResult.summary,
     });
@@ -59,8 +67,6 @@ export async function runChatPipeline(input: {
   }
 
   const stream = await streamSearchAdvice({
-    question: input.question,
-    threadId: input.threadId,
     advice: searchResult.advice,
   });
 

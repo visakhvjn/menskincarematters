@@ -4,8 +4,11 @@ import { z } from "zod";
 import { sharedLlm } from "@/lib/chat/utils/llm";
 import { SEARCH_AGENT_SYSTEM_PROMPT } from "@/lib/chat/prompts";
 import { duckDuckGoSearchTool } from "@/lib/chat/tools/duckDuckGoSearch";
-import { buildUserMessage } from "@/lib/chat/utils/messages";
-import { agentEventsToStream, textToStream } from "@/lib/chat/utils/agentStream";
+import {
+  buildConversationMessages,
+  type ChatHistoryMessage,
+} from "@/lib/chat/utils/messages";
+import { textToStream } from "@/lib/chat/utils/agentStream";
 
 const checkpointer = new MemorySaver();
 
@@ -29,10 +32,11 @@ export const searchAgent = createAgent({
 export async function findProductSuggestions(input: {
   question: string;
   threadId: string;
+  history: ChatHistoryMessage[];
 }): Promise<ProductSearchResult> {
   const result = await searchAgent.invoke(
     {
-      messages: [{ role: "user", content: buildUserMessage(input.question) }],
+      messages: buildConversationMessages(input.history, input.question),
     },
     {
       configurable: {
@@ -64,25 +68,11 @@ export async function findProductSuggestions(input: {
 }
 
 export async function streamSearchAdvice(input: {
-  question: string;
-  threadId: string;
   advice: string;
 }): Promise<ReadableStream<Uint8Array>> {
-  if (input.advice.trim()) {
-    return textToStream(input.advice);
-  }
+  const text =
+    input.advice.trim() ||
+    "I'm here for men's skincare questions. What would you like to know?";
 
-  const eventStream = await searchAgent.streamEvents(
-    {
-      messages: [{ role: "user", content: buildUserMessage(input.question) }],
-    },
-    {
-      configurable: {
-        thread_id: `search-stream-${input.threadId}`,
-      },
-      version: "v2",
-    }
-  );
-
-  return agentEventsToStream(eventStream);
+  return textToStream(text);
 }

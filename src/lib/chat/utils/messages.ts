@@ -47,8 +47,33 @@ function getCurrentDateLabel() {
   });
 }
 
+export type ChatHistoryMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+const MAX_HISTORY_MESSAGES = 20;
+
 export function buildUserMessage(question: string) {
   return `[Current date: ${getCurrentDateLabel()}]\n\n${question}`;
+}
+
+export function buildConversationMessages(
+  history: ChatHistoryMessage[],
+  question: string,
+  maxMessages = MAX_HISTORY_MESSAGES
+) {
+  const trimmedHistory = history
+    .filter((message) => message.content.trim())
+    .slice(-maxMessages);
+
+  return [
+    ...trimmedHistory.map((message) => ({
+      role: message.role,
+      content: message.content,
+    })),
+    { role: "user" as const, content: buildUserMessage(question) },
+  ];
 }
 
 export function extractAssistantText(messages: unknown[]): string {

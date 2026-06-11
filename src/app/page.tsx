@@ -189,6 +189,8 @@ export default function Home() {
     const trimmed = message.trim();
     if (!trimmed || isLoading) return;
 
+    const priorHistory = messages;
+
     setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
     setInput("");
     setError(null);
@@ -198,7 +200,11 @@ export default function Home() {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: trimmed, threadId }),
+        body: JSON.stringify({
+          message: trimmed,
+          threadId,
+          history: priorHistory,
+        }),
       });
 
       if (!response.ok) {

@@ -327,6 +327,38 @@ function mergeStoreLinks(...groups: StoreLink[][]) {
   return [...byStore.values()];
 }
 
+const STORE_PRIORITY = [
+  "Flipkart",
+  "Nykaa",
+  "Amazon India",
+  "Nykaa Man",
+  "Purplle",
+  "Myntra",
+  "Tira",
+  "1mg",
+  "PharmEasy",
+  "Maccaron",
+  "Minimalist",
+  "Mamaearth",
+  "The Man Company",
+  "Beardo",
+  "mCaffeine",
+  "Plum",
+  "Dot & Key",
+  "Derma Co",
+];
+
+function pickBestStoreLink(links: StoreLink[]): StoreLink | null {
+  if (links.length === 0) return null;
+
+  for (const store of STORE_PRIORITY) {
+    const match = links.find((link) => link.store === store);
+    if (match) return match;
+  }
+
+  return links[0];
+}
+
 function formatIndianProductResponse(input: {
   query: string;
   images: ProductImage[];
@@ -349,11 +381,10 @@ function formatIndianProductResponse(input: {
 
   if (input.storeLinks.length > 0) {
     const productName = input.query;
+    const link = input.storeLinks[0];
     lines.push(
-      "Product buy links (use the product name as link text — no store names, no 'Where to buy' section):",
-      ...input.storeLinks.map(
-        (link, index) => `${index + 1}. [${productName}](${link.url})`
-      )
+      "Product buy link (include exactly one — use the product name as link text):",
+      `[${productName}](${link.url})`
     );
   } else {
     lines.push(
@@ -382,15 +413,16 @@ export async function searchIndianProducts(
     ...storesToSearch.map((store) => searchStoreLink(product, store)),
   ]);
 
-  const storeLinks = mergeStoreLinks(
+  const mergedLinks = mergeStoreLinks(
     shoppingLinks,
     perStoreLinks.filter((link): link is StoreLink => link !== null)
   );
+  const bestLink = pickBestStoreLink(mergedLinks);
 
   return formatIndianProductResponse({
     query: product,
-    images,
-    storeLinks,
+    images: images.slice(0, 1),
+    storeLinks: bestLink ? [bestLink] : [],
   });
 }
 
@@ -405,7 +437,7 @@ export const indianProductSearchTool = tool(
   {
     name: "indian_product_search",
     description:
-      "Search for a men's skincare product in India. Returns product images plus buy links from multiple Indian stores (Flipkart, Nykaa, Amazon.in, Purplle, Myntra, brand sites, etc.) — not just Amazon.",
+      "Search for a men's skincare product in India. Returns one product image and one best buy link from Indian stores (Flipkart, Nykaa, Amazon.in, etc.).",
     schema: z.object({
       query: z
         .string()
@@ -420,9 +452,9 @@ export const indianProductSearchTool = tool(
       maxImages: z
         .number()
         .int()
-        .min(1)
-        .max(4)
-        .default(3)
+        .min(0)
+        .max(2)
+        .default(1)
         .describe("Maximum number of product images."),
     }),
   }

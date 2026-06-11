@@ -37,11 +37,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const { message, threadId } = parsed.data;
+    const { message, threadId, history } = parsed.data;
     const resolvedThreadId = threadId ?? crypto.randomUUID();
     const result = await runChatPipeline({
       question: message,
       threadId: resolvedThreadId,
+      history,
     });
 
     if (result.type === "refusal") {
