@@ -3,6 +3,7 @@ import { MemorySaver } from "@langchain/langgraph-checkpoint";
 import { sharedLlm } from "@/lib/chat/utils/llm";
 import { PRODUCT_FETCHER_SYSTEM_PROMPT } from "@/lib/chat/prompts";
 import { indianProductSearchTool } from "@/lib/chat/tools/indianProductSearch";
+import type { ProductSuggestion } from "@/lib/chat/agents/searchAgent";
 import {
   buildConversationMessages,
   type ChatHistoryMessage,
@@ -20,11 +21,14 @@ export const productFetcherAgent = createAgent({
 
 function buildFetcherQuestion(input: {
   question: string;
-  products: string[];
+  products: ProductSuggestion[];
   summary: string;
 }) {
   const productList = input.products
-    .map((name, index) => `${index + 1}. ${name}`)
+    .map(
+      (product, index) =>
+        `${index + 1}. ${product.name}\n   Verified product URL: ${product.url}`
+    )
     .join("\n");
 
   return `User question: ${input.question}
@@ -34,14 +38,14 @@ ${productList}
 
 Context from product search: ${input.summary}
 
-Fetch each product using indian_product_search, then write the final answer with one image and one buy link per product. Use the product name as the link text (e.g. [Product name](url)). Do not add a "Where to buy in India" section or use store names as link text.`;
+Use indian_product_search to find one image for each product. Keep the verified product URL supplied above as the buy link; do not replace it with a URL returned by the image search. Write the final answer with one image and one buy link per product. Use the product name as the link text (e.g. [Product name](url)). Do not add a "Where to buy in India" section or use store names as link text.`;
 }
 
 export async function streamIndianProductAnswer(input: {
   question: string;
   threadId: string;
   history: ChatHistoryMessage[];
-  products: string[];
+  products: ProductSuggestion[];
   summary: string;
 }): Promise<ReadableStream<Uint8Array>> {
   const fetchQuestion = buildFetcherQuestion(input);

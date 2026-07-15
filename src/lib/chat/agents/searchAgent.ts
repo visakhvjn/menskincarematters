@@ -12,14 +12,35 @@ import { textToStream } from "@/lib/chat/utils/agentStream";
 
 const checkpointer = new MemorySaver();
 
+const productSuggestionSchema = z.object({
+  name: z
+    .string()
+    .describe("Exact brand, product name, and variant shown by the source."),
+  url: z
+    .string()
+    .describe(
+      "Direct Indian product-page URL copied from search results (must start with https://)."
+    ),
+});
+
+function isHttpUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 const searchResultSchema = z.object({
   hasProducts: z.boolean(),
-  products: z.array(z.string()).max(3),
+  products: z.array(productSuggestionSchema).max(3),
   summary: z.string(),
   advice: z.string(),
 });
 
 export type ProductSearchResult = z.infer<typeof searchResultSchema>;
+export type ProductSuggestion = z.infer<typeof productSuggestionSchema>;
 
 export const searchAgent = createAgent({
   model: sharedLlm,
@@ -48,7 +69,10 @@ export async function findProductSuggestions(input: {
   const parsed = searchResultSchema.safeParse(result.structuredResponse);
   if (parsed.success) {
     const products = parsed.data.products
-      .filter((name) => name.trim().length > 0)
+      .filter(
+        (product) =>
+          product.name.trim().length > 0 && isHttpUrl(product.url.trim())
+      )
       .slice(0, 3);
 
     return {
