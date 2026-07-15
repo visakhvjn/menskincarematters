@@ -332,9 +332,9 @@ export default function Home() {
               {CAPABILITIES.map((item) => (
                 <li
                   key={item}
-                  className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-xs leading-relaxed text-slate-500"
+                  className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-xs leading-relaxed text-slate-500"
                 >
-                  <span className="mt-0.5 text-blue-600" aria-hidden>
+                  <span className="text-blue-600" aria-hidden>
                     ✓
                   </span>
                   {item}
